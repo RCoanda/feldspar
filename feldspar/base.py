@@ -32,40 +32,6 @@ class Importer(BaseGenerator, metaclass=ABCMeta):
     def __next__(self):
         pass
 
-
-class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
-    """Base class for element generating objects such as event and trace 
-    generators.
-
-    **Warning**: This class should not be used directly.
-    Use derived classes instead.
-
-    Parameters
-    ----------
-    *args: iterable
-        Underlying generator.
-
-    attributes: dict
-        Set of attributs 
-
-    Attributes
-    ----------
-    attributes: dict
-        Set of attributes specific to the generator. Might be passed down from
-        an underlying generator.
-    """
-
-    def __init__(self, *args, attributes=None):
-        self._gen = args
-        self.attributes_ = attributes
-
-    @property
-    def attributes(self):
-        """Return generator attributes.
-        """
-        return self.attributes_
-
-
 class Event(Mapping):
     """Base event object.
 

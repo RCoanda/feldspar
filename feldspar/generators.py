@@ -3,14 +3,51 @@ import warnings
 import zipfile
 from abc import ABCMeta
 from collections.abc import Iterator
+from itertools import islice
 
 from dateutil.parser import parse
 from lxml import etree
 
-from .base import ElementGenerator, Event, Importer, Trace
+from .base import BaseGenerator, Event, Importer, Trace
 from .utils import infer_compression
 
 PARSABLE_COMPRESSIONS = ['gz', 'zip']
+
+
+class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
+    """Base class for element generating objects such as event and trace 
+    generators.
+
+    **Warning**: This class should not be used directly.
+    Use derived classes instead.
+
+    Parameters
+    ----------
+    *args: iterable
+        Underlying generator.
+
+    attributes: dict
+        Set of attributs 
+
+    Attributes
+    ----------
+    attributes: dict
+        Set of attributes specific to the generator. Might be passed down from
+        an underlying generator.
+    """
+
+    def __init__(self, *args, attributes=None):
+        self._gen = args
+        self.attributes_ = attributes
+
+    def cache(self, buffer_size=None):
+        return _CacheGenerator(*self._gen, buffer_size=buffer_size)
+
+    @property
+    def attributes(self):
+        """Return generator attributes.
+        """
+        return self.attributes_
 
 
 class XESImporter(Importer):
@@ -63,13 +100,13 @@ class XESImporter(Importer):
         self.__context = None
 
     def __iter__(self):
-        self._initialize_resources(tag="{*}trace")
+        self.__initialize_resources(tag="{*}trace")
         return self
 
     def __next__(self):
         try:
             _, elem = next(self.__context)
-            trace = self._parse_trace(elem)
+            trace = self.__parse_trace(elem)
             elem.clear()
 
             while elem.getprevious() is not None:
@@ -78,10 +115,10 @@ class XESImporter(Importer):
             return trace
 
         except StopIteration:
-            self._clean_resources()
+            self.__clean_resources()
             raise StopIteration
 
-    def _initialize_resources(self, events=('end',), tag=None):
+    def __initialize_resources(self, events=('end',), tag=None):
         """Setup up source resources, primarily the `lxml` iterator.
 
         Parameters
@@ -110,7 +147,7 @@ class XESImporter(Importer):
         self.__context = etree.iterparse(
             self.__source, events=events, tag=tag)
 
-    def _clean_resources(self):
+    def __clean_resources(self):
         """Close resources opened in a previous step, such as releasing opened
         files and archives.
         """
@@ -128,7 +165,7 @@ class XESImporter(Importer):
         """Extract XES log meta informations such as classifiers, extensions, 
         attributes and global definitions.
         """
-        self._initialize_resources()
+        self.__initialize_resources()
 
         attributes, classifiers, extensions = dict(), dict(), dict()
         omni = {"trace": dict(), "event": dict()}
@@ -141,14 +178,14 @@ class XESImporter(Importer):
             if "global" in elem.tag:
                 for child in elem.iterchildren():
                     omni[elem.attrib["scope"]][child.attrib["key"]
-                                               ] = self._parse_attribute(child)
+                                               ] = self.__parse_attribute(child)
             # TODO: Add asumption in documentation.
             # ASSUMPTION: All trace tags lie at the end of the XES file, and
             # after and in-between them there are no other tag types.
             if "trace" in elem.tag:
                 break
 
-        self._clean_resources()
+        self.__clean_resources()
 
         return {
             'attributes': attributes,
@@ -157,7 +194,7 @@ class XESImporter(Importer):
             'omni': omni
         }
 
-    def _parse_trace(self, trace):
+    def __parse_trace(self, trace):
         """Parse trace as described in the XES standard
         definition [1]_.
 
@@ -179,14 +216,14 @@ class XESImporter(Importer):
                 e = Event()
                 for attribute in child.iterchildren():
                     e[attribute.attrib["key"]
-                      ] = self._parse_attribute(attribute)
+                      ] = self.__parse_attribute(attribute)
                 events.append(e)
             else:
-                attrib[child.attrib["key"]] = self._parse_attribute(child)
+                attrib[child.attrib["key"]] = self.__parse_attribute(child)
 
         return Trace(*events, attributes=attrib)
 
-    def _parse_attribute(self, attribute):
+    def __parse_attribute(self, attribute):
         """Parse an attribute as described in the XES standard
         definition [1]_.
 
@@ -218,7 +255,7 @@ class XESImporter(Importer):
 
 class TraceGenerator(ElementGenerator):
     """Generating trace class, representation for an event log.
-    
+
     Parameters
     ----------
     *args: iterable
@@ -247,6 +284,7 @@ class TraceGenerator(ElementGenerator):
     >>> L = L.filter(lambda trace: len(trace) < 5)
     >>> L = L.shuffle() 
     """
+
     def __init__(self, *args, attributes=None):
         if attributes is None:
             attributes, classifiers, extensions = dict(), dict(), dict()
@@ -290,3 +328,26 @@ class TraceGenerator(ElementGenerator):
         attributes = gen._extract_meta()
 
         return TraceGenerator(gen, attributes=attributes)
+
+class _CacheGenerator(ElementGenerator):
+
+    def __init__(self, *args, buffer_size=None):
+        super(_CacheGenerator, self).__init__()
+        self.__cache_generator(*args, buffer_size=buffer_size)
+
+    def __iter__(self):
+        if self._gen is None:
+            raise ValueError(
+                "No underlying generator has yet been initialized.")
+        return iter(*self._gen)
+
+    def __cache_generator(self, *args, buffer_size=None):
+        l = list(islice(iter(*args), buffer_size))
+        self._gen = l 
+
+    @property
+    def attributes(self):
+        if self._gen is None:
+            raise ValueError(
+                "No underlying generator has yet been initialized.")
+        return self._gen.attributes

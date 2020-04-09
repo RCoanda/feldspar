@@ -96,6 +96,11 @@ class TestTraceGenerator:
         assert len(list(L)) == 6
         assert len(list(L)) == 6
 
+    def test_cache(self):
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.cache()
+        assert isinstance(L._gen, list)
+
     def test_filter(self):
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
         
@@ -110,3 +115,5 @@ class TestTraceGenerator:
         
         assert len(list(L)) == 4
         assert len(list(L)) == 4
+
+    
