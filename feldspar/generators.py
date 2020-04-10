@@ -1,15 +1,16 @@
 import gzip
+import os
+import pickle
 import warnings
 import zipfile
 from abc import ABCMeta
 from collections.abc import Iterator
-from itertools import islice
 
 from dateutil.parser import parse
 from lxml import etree
 
 from .base import BaseGenerator, Event, Importer, Trace
-from .utils import infer_compression
+from .utils import infer_compression, validate_filepath
 
 PARSABLE_COMPRESSIONS = ['gz', 'zip']
 
@@ -36,19 +37,18 @@ class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
         an underlying generator.
     """
 
-    def __init__(self, *args, attributes=None):
-        self._gen = args
-        self.attributes_ = attributes
+    def __init__(self, source, attributes=None):
+        self._source = source
+        self.__attributes = attributes
 
-    def cache(self, buffer_size=None):
-        return _CacheGenerator(*self._gen, buffer_size=buffer_size)
+    def cache(self, filepath=None):
+        return _CacheGenerator(self._source, filepath=filepath)
 
     @property
     def attributes(self):
         """Return generator attributes.
         """
-        return self.attributes_
-
+        return self.__attributes
 
 class XESImporter(Importer):
     """Importer of XES files. 
@@ -252,13 +252,29 @@ class XESImporter(Importer):
 
         return value
 
+class _PickleImporter(Importer):
+    def __init__(self, filepath):
+        self.__filepath = filepath
+
+    def __iter__(self):
+        self.__source = open(self.__filepath, 'rb')
+        return self
+
+    def __next__(self):
+        try:
+            trace = pickle.load(self.__source)
+            return trace
+        except EOFError:
+            self.__source.close()
+            raise StopIteration
+
 
 class TraceGenerator(ElementGenerator):
     """Generating trace class, representation for an event log.
 
     Parameters
     ----------
-    *args: iterable
+    source: iterable or list-like
         Underlying generator.
 
     attributes: dict, default `None`
@@ -285,7 +301,7 @@ class TraceGenerator(ElementGenerator):
     >>> L = L.shuffle() 
     """
 
-    def __init__(self, *args, attributes=None):
+    def __init__(self, source, attributes=None):
         if attributes is None:
             attributes, classifiers, extensions = dict(), dict(), dict()
             omni = {"trace": dict(), "event": dict()}
@@ -295,13 +311,13 @@ class TraceGenerator(ElementGenerator):
                 'extensions': extensions,
                 'omni': omni
             }
-        super(TraceGenerator, self).__init__(*args, attributes=attributes)
+        super(TraceGenerator, self).__init__(source, attributes=attributes)
 
     def __iter__(self):
-        if self._gen is None:
+        if self._source is None:
             raise ValueError(
                 "No underlying generator has yet been initialized.")
-        return iter(*self._gen)
+        return iter(self._source)
 
     @staticmethod
     def from_file(filepath, compression=None):
@@ -329,25 +345,52 @@ class TraceGenerator(ElementGenerator):
 
         return TraceGenerator(gen, attributes=attributes)
 
+
 class _CacheGenerator(ElementGenerator):
 
-    def __init__(self, *args, buffer_size=None):
-        super(_CacheGenerator, self).__init__()
-        self.__cache_generator(*args, buffer_size=buffer_size)
+    def __init__(self, source, filepath=None):
+        self.__cached = False
+        self.__cache = []
+        
+        if filepath is not None:
+            if not validate_filepath(filepath):
+                raise ValueError("Make sure filepath exists. Path: {}.".format(filepath))
+            if os.path.getsize(filepath) == 0:
+                self.__pickle_generator_to_file(source, filepath)
+            source = _PickleImporter(filepath)
 
+        super(_CacheGenerator, self).__init__(source)
+        # Reference to original generator
+        self.__original = self._source
+        
     def __iter__(self):
-        if self._gen is None:
-            raise ValueError(
-                "No underlying generator has yet been initialized.")
-        return iter(*self._gen)
+        if self.__cached:
+            self._source = self.__cache
+        self._source = iter(self._source)
+        return self
 
-    def __cache_generator(self, *args, buffer_size=None):
-        l = list(islice(iter(*args), buffer_size))
-        self._gen = l 
+    def __next__(self):
+        try:
+            trace = next(self._source)
+            if not self.__cached:
+                self.__cache.append(trace)
+            return trace
+        except StopIteration:
+            if not self.__cached:
+                self.__cached = True
+                self._source = self.__cache
+            raise StopIteration
+
+    def __pickle_generator_to_file(self, source, filepath):
+        with open(filepath, 'wb') as handler:
+            for trace in source:
+                pickle.dump(trace, handler)
 
     @property
     def attributes(self):
-        if self._gen is None:
+        if self._source is None:
             raise ValueError(
                 "No underlying generator has yet been initialized.")
-        return self._gen.attributes
+        if self.__cached:
+            return self.__origin.attributes
+        return self._source.attributes

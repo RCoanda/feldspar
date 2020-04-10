@@ -32,6 +32,7 @@ class Importer(BaseGenerator, metaclass=ABCMeta):
     def __next__(self):
         pass
 
+
 class Event(Mapping):
     """Base event object.
 
@@ -68,6 +69,9 @@ class Event(Mapping):
     def __repr__(self):
         return '{}, Event({})'.format(super(Event, self).__repr__(),
                                       self.__dict__)
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 
 class Trace(Sequence):
@@ -111,8 +115,11 @@ class Trace(Sequence):
     def __repr__(self):
         return "Trace(events={})".format(len(self))
 
+    def __eq__(self, other):
+        return self.__list == other.__list and self.attributes == other.attributes
+
     @property
     def attributes(self):
         """Return trace attributes.
         """
-        return self.attributes_
+        return self.__attributes

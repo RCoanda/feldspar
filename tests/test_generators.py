@@ -3,9 +3,10 @@ import os
 import pytest
 from dateutil.parser import parse
 
-from feldspar.generators import XESImporter, TraceGenerator
+from feldspar.generators import XESImporter, TraceGenerator, _PickleImporter
 
 from . import RUNNING_EXAMPLE_XES_PATH, RUNNING_EXAMPLE_XES_GZ_PATH, RUNNING_EXAMPLE_XES_ZIP_PATH
+from .fixtures import tmp_dat_file
 
 
 class TestXESImporter:
@@ -71,9 +72,9 @@ class TestXESImporter:
 
     def test_extract_meta_omni(self):
         it = XESImporter(RUNNING_EXAMPLE_XES_PATH)
-        attributes = it.extract_meta()
+        attributes = it._extract_meta()
         target = {
-            "trace": { "concept:name": "name" },
+            "trace": {"concept:name": "name"},
             "event": {
                 "concept:name": "name",
                 "org:resource": "resource",
@@ -84,6 +85,7 @@ class TestXESImporter:
             }
         }
         assert attributes['omni'] == target
+
 
 class TestTraceGenerator:
 
@@ -96,24 +98,61 @@ class TestTraceGenerator:
         assert len(list(L)) == 6
         assert len(list(L)) == 6
 
-    def test_cache(self):
+class TestElementGeneratorCaching:
+    def test_cache_swapping_sources(self):
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
         L = L.cache()
-        assert isinstance(L._gen, list)
+        # Before first iteration previous generator should be used
+        assert isinstance(L._source, XESImporter)
+        assert len(list(L)) == 6
+        # After iteration, everything should be cached
+        assert isinstance(L._source, list)
+        assert len(list(L)) == 6
 
+    def test_cache_correct_element_reproduction(self):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.cache()
+        list(L)
+        assert all(x == y for x, y in zip(L, target))
+
+    def test_cache_to_file_swapping_sources(self, tmp_dat_file):
+        assert os.path.getsize(tmp_dat_file) == 0
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.cache(tmp_dat_file)
+        # Even in the first iteration element aren cached in file
+        assert os.path.getsize(tmp_dat_file) != 0
+        assert isinstance(L._source, _PickleImporter)
+        assert len(list(L)) == 6
+
+    def test_cache_to_file_correct_element_reproduction(self, tmp_dat_file):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.cache(tmp_dat_file)
+        assert all(x == y for x, y in zip(L, target))
+
+    def test_cache_correct_attributes(self):
+        assert False
+
+    def test_cache_multiple_iterations(self):
+        assert False
+
+    def test_cache_to_file_multiple_iterations(self):
+        assert False
+
+    def test_cache_to_file_persistent_file(self):
+        assert False
+
+class TestElementGeneratorFiltering:
     def test_filter(self):
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
-        
         L = L.filter(lambda t: int(t["concept:name"]) > 2)
-        
         assert len(list(L)) == 4
 
     def test_filter_multiple_pass_throughs(self):
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
-        
-        L = L.filter(lambda t: int(t["concept:name"]) > 2)
-        
-        assert len(list(L)) == 4
-        assert len(list(L)) == 4
 
-    
+        L = L.filter(lambda t: int(t["concept:name"]) > 2)
+
+        assert len(list(L)) == 4
+        assert len(list(L)) == 4
