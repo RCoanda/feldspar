@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 class BaseGenerator(metaclass=ABCMeta):
     """Base class all generators inherit from.
 
-    **Warning**: This class should not be used directly.
-    Use derived classes instead.
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
     """
 
     def __init__(self):
@@ -21,8 +21,8 @@ class Importer(BaseGenerator, metaclass=ABCMeta):
     """Special type of `BaseGenerator`, that is always the initial element
     producing block.
 
-    **Warning**: This class should not be used directly.
-    Use derived classes instead.
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
     """
 
     def __init__(self):

@@ -19,12 +19,12 @@ class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
     """Base class for element generating objects such as event and trace 
     generators.
 
-    **Warning**: This class should not be used directly.
-    Use derived classes instead.
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
 
     Parameters
     ----------
-    *args: iterable
+    source: iterable
         Underlying generator.
 
     attributes: dict
@@ -42,7 +42,66 @@ class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
         self.__attributes = attributes
 
     def cache(self, filepath=None):
-        return _CacheGenerator(self._source, filepath=filepath)
+        """Caches the elements in this dataset.
+
+        The first time the dataset is iterated over, its elements will 
+        be cached either in the specified file or in memory. Subsequent 
+        iterations will use the cached data.
+
+        When caching to a file, the cached data will persist across runs. 
+        Even the first iteration through the data will read from the cache 
+        file. Changing the input pipeline before the call to .cache() will 
+        have no effect until the cache file is removed or the filename is 
+        changed.
+
+        .. note::
+            For the cache to be finalized, the input dataset must be 
+            iterated through in its entirety. Otherwise, subsequent 
+            iterations will not use cached data.
+
+            We would also like to mention and thank the tensorflow team,
+            as this has been a great inspiration.[1]_
+
+        Parameters
+        ----------
+        filepath: path-like
+            A `str` representing the name of a file on the filesystem 
+            to use for caching elements in this Dataset. If a filename is not 
+            provided, the dataset will be cached in memory.
+
+        Returns
+        -------
+        `ElementGenerator`
+
+        Examples
+        --------
+        >>> L = TraceGenerator.from_file('/path/to/file.xes')
+        >>> L = L.filter(lambda trace: len(trace) <= 5)
+        >>> L = L.cache() 
+        >>> # The first time reading through the data will generate the data using 
+        >>> # `from_file` and `filter`.
+        >>> len(list(L))
+        ... 6 
+        >>> # Subsequent iterations read from the cache.
+        >>> len(list(L))
+        ... 6
+
+        Similarly, you can also cache to a file.
+        >>> L = TraceGenerator.from_file('/path/to/file.xes')
+        >>> L = L.filter(lambda trace: len(trace) <= 5)
+        >>> L = L.cache(/path/to/cache_file.dat)
+
+        References
+        ----------
+        .. [1] TensorFlow. (2020). tf.data.Dataset  |  TensorFlow Core v2.1.0. 
+            [online] Available at: 
+            https://www.tensorflow.org/api_docs/python/tf/data/Dataset#cache 
+            [Accessed 11 Apr. 2020].
+        """
+        return _CacheGenerator(self, filepath=filepath)
+
+    def filter(self, predicate):
+        return self
 
     @property
     def attributes(self):
@@ -56,9 +115,9 @@ class XESImporter(Importer):
     Attempts to implements as close as possible the XES standard
     definition [1]_. 
 
-    **Warning**: We currently assume that all meta information lies before the 
-    first occurence of a trace and none after.
-
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
+    
     Parameters
     ----------
     fielpath: str
@@ -253,6 +312,18 @@ class XESImporter(Importer):
         return value
 
 class _PickleImporter(Importer):
+    """Importer for pickled elements.
+
+    Elements are expected to have been inserted one-by-one,
+    as the `_PickleImporter` still iterates over the file, 
+    instead of reading all into memory.
+
+    Parameters
+    ----------
+    filepath: path-like
+        A `str` representing the name of an existing file on the 
+        filesystem.
+    """
     def __init__(self, filepath):
         self.__filepath = filepath
 
@@ -323,8 +394,9 @@ class TraceGenerator(ElementGenerator):
     def from_file(filepath, compression=None):
         """Parse an xes-file iteratively. 
 
-        **Warning**: We currently assume that all meta information lies before the 
-        first occurence of a trace in the xes-file and none after.
+        .. warning::
+            We currently assume that all meta information lies before the 
+            first occurence of a trace in the xes-file and none after.
 
         Parameters
         ----------
@@ -347,21 +419,26 @@ class TraceGenerator(ElementGenerator):
 
 
 class _CacheGenerator(ElementGenerator):
+    """A `ElementGenerator` that caches the elements of it's source.
+    """
 
     def __init__(self, source, filepath=None):
         self.__cached = False
         self.__cache = []
+
+        # Reference to original generator
+        self.__original = source
         
         if filepath is not None:
             if not validate_filepath(filepath):
                 raise ValueError("Make sure filepath exists. Path: {}.".format(filepath))
             if os.path.getsize(filepath) == 0:
                 self.__pickle_generator_to_file(source, filepath)
-            source = _PickleImporter(filepath)
+            self.__cache = _PickleImporter(filepath)
+            source = self.__cache
+            self.__cached = True
 
         super(_CacheGenerator, self).__init__(source)
-        # Reference to original generator
-        self.__original = self._source
         
     def __iter__(self):
         if self.__cached:
@@ -388,9 +465,11 @@ class _CacheGenerator(ElementGenerator):
 
     @property
     def attributes(self):
+        """Returns underlying generator attributes.
+        """
         if self._source is None:
             raise ValueError(
                 "No underlying generator has yet been initialized.")
         if self.__cached:
-            return self.__origin.attributes
+            return self.__original.attributes
         return self._source.attributes

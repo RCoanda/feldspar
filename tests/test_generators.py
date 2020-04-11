@@ -5,7 +5,8 @@ from dateutil.parser import parse
 
 from feldspar.generators import XESImporter, TraceGenerator, _PickleImporter
 
-from . import RUNNING_EXAMPLE_XES_PATH, RUNNING_EXAMPLE_XES_GZ_PATH, RUNNING_EXAMPLE_XES_ZIP_PATH
+from . import (RUNNING_EXAMPLE_XES_PATH, RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH,
+               RUNNING_EXAMPLE_XES_GZ_PATH, RUNNING_EXAMPLE_XES_ZIP_PATH)
 from .fixtures import tmp_dat_file
 
 
@@ -98,12 +99,13 @@ class TestTraceGenerator:
         assert len(list(L)) == 6
         assert len(list(L)) == 6
 
+
 class TestElementGeneratorCaching:
     def test_cache_swapping_sources(self):
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
         L = L.cache()
         # Before first iteration previous generator should be used
-        assert isinstance(L._source, XESImporter)
+        assert isinstance(L._source, TraceGenerator)
         assert len(list(L)) == 6
         # After iteration, everything should be cached
         assert isinstance(L._source, list)
@@ -131,17 +133,57 @@ class TestElementGeneratorCaching:
         L = L.cache(tmp_dat_file)
         assert all(x == y for x, y in zip(L, target))
 
-    def test_cache_correct_attributes(self):
-        assert False
+    def test_cache_before_caching_correct_attributes(self):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.cache()
+        assert L.attributes == target.attributes
+
+    def test_cache_after_caching_correct_attributes(self):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.cache()
+        list(L)
+        assert L.attributes == target.attributes
+
+    def test_cache_to_file_after_caching_correct_attributes(self, tmp_dat_file):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.cache(tmp_dat_file)
+        assert L.attributes == target.attributes
 
     def test_cache_multiple_iterations(self):
-        assert False
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        assert L.attributes == target.attributes
+        L = L.cache()
+        assert L.attributes == target.attributes
+        assert all(x == y for x, y in zip(L, target))
+        assert all(x == y for x, y in zip(L, target))
+        assert all(x == y for x, y in zip(L, target))
+        assert L.attributes == target.attributes
 
-    def test_cache_to_file_multiple_iterations(self):
-        assert False
+    def test_cache_to_file_multiple_iterations(self, tmp_dat_file):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        assert L.attributes == target.attributes
+        L = L.cache(tmp_dat_file)
+        assert L.attributes == target.attributes
+        assert all(x == y for x, y in zip(L, target))
+        assert all(x == y for x, y in zip(L, target))
+        assert all(x == y for x, y in zip(L, target))
+        assert L.attributes == target.attributes
 
-    def test_cache_to_file_persistent_file(self):
-        assert False
+    def test_cache_to_file_persistent_file(self, tmp_dat_file):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L0 = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L0 = L0.cache(tmp_dat_file)
+
+        L1 = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
+        L1 = L1.cache(tmp_dat_file)
+
+        assert all(x == y for x, y in zip(L1, target))
+
 
 class TestElementGeneratorFiltering:
     def test_filter(self):

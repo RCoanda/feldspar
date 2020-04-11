@@ -2,7 +2,6 @@ import os
 import pytest
 import calendar
 import time
-from . import TMP_TEST_PATH
 
 @pytest.fixture
 def tmp_dat_file(tmpdir):
