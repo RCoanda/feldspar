@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 class BaseGenerator(metaclass=ABCMeta):
     """Base class all generators inherit from.
 
-    **Warning**: This class should not be used directly.
-    Use derived classes instead.
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
     """
 
     def __init__(self):
@@ -21,8 +21,8 @@ class Importer(BaseGenerator, metaclass=ABCMeta):
     """Special type of `BaseGenerator`, that is always the initial element
     producing block.
 
-    **Warning**: This class should not be used directly.
-    Use derived classes instead.
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
     """
 
     def __init__(self):
@@ -31,39 +31,6 @@ class Importer(BaseGenerator, metaclass=ABCMeta):
     @abstractmethod
     def __next__(self):
         pass
-
-
-class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
-    """Base class for element generating objects such as event and trace 
-    generators.
-
-    **Warning**: This class should not be used directly.
-    Use derived classes instead.
-
-    Parameters
-    ----------
-    *args: iterable
-        Underlying generator.
-
-    attributes: dict
-        Set of attributs 
-
-    Attributes
-    ----------
-    attributes: dict
-        Set of attributes specific to the generator. Might be passed down from
-        an underlying generator.
-    """
-
-    def __init__(self, *args, attributes=None):
-        self._gen = args
-        self.attributes_ = attributes
-
-    @property
-    def attributes(self):
-        """Return generator attributes.
-        """
-        return self.attributes_
 
 
 class Event(Mapping):
@@ -102,6 +69,9 @@ class Event(Mapping):
     def __repr__(self):
         return '{}, Event({})'.format(super(Event, self).__repr__(),
                                       self.__dict__)
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 
 class Trace(Sequence):
@@ -145,8 +115,11 @@ class Trace(Sequence):
     def __repr__(self):
         return "Trace(events={})".format(len(self))
 
+    def __eq__(self, other):
+        return self.__list == other.__list and self.attributes == other.attributes
+
     @property
     def attributes(self):
         """Return trace attributes.
         """
-        return self.attributes_
+        return self.__attributes

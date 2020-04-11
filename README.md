@@ -1,7 +1,7 @@
 <span align="center">
   <pre>
     <a href="https://github.com/xcavation/feldspar">
-      <img src="https://raw.githubusercontent.com/xcavation/feldspar/develop/readme_cover.jpg" align="center">
+      <img src="https://raw.githubusercontent.com/xcavation/feldspar/develop/assets/readme_cover.jpg" align="center">
     </a>
     Photo by Stephen Leonardi on Unsplash
   </pre>
@@ -19,6 +19,7 @@ Foundational process mining library.
 
 >>> L = L.filter(lambda trace: len(trace) < 5)
 >>> L = L.map(lambda trace: tuple(event["concept:name"] for event in trace))
+>>> L = L.cache()
 >>> L = L.shuffle()
 
 >>> for trace in L:
@@ -26,3 +27,27 @@ Foundational process mining library.
 ```
 
 
+<p>&nbsp;</p>
+
+## Supported Features
+<hr>
+
+Feldspar is here to help you with you process mining needs.
+
+<pre class="test">
+         +  iterate XES files                         + next entry
+         +  cache your datasets to memory 
+            or to file
+</pre>
+
+
+## Install
+<hr>
+
+The recommended way to intall the `feldspar` module is to simply use `pip`:
+```console
+$ pip install feldspar
+```
+
+## Resources
+<hr>

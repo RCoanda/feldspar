@@ -1,4 +1,6 @@
 import gzip
+import os
+import pickle
 import warnings
 import zipfile
 from abc import ABCMeta
@@ -7,11 +9,105 @@ from collections.abc import Iterator
 from dateutil.parser import parse
 from lxml import etree
 
-from .base import ElementGenerator, Event, Importer, Trace
-from .utils import infer_compression
+from .base import BaseGenerator, Event, Importer, Trace
+from .utils import infer_compression, validate_filepath
 
 PARSABLE_COMPRESSIONS = ['gz', 'zip']
 
+
+class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
+    """Base class for element generating objects such as event and trace 
+    generators.
+
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
+
+    Parameters
+    ----------
+    source: iterable
+        Underlying generator.
+
+    attributes: dict
+        Set of attributs 
+
+    Attributes
+    ----------
+    attributes: dict
+        Set of attributes specific to the generator. Might be passed down from
+        an underlying generator.
+    """
+
+    def __init__(self, source, attributes=None):
+        self._source = source
+        self.__attributes = attributes
+
+    def cache(self, filepath=None):
+        """Caches the elements in this dataset.
+
+        The first time the dataset is iterated over, its elements will 
+        be cached either in the specified file or in memory. Subsequent 
+        iterations will use the cached data.
+
+        When caching to a file, the cached data will persist across runs. 
+        Even the first iteration through the data will read from the cache 
+        file. Changing the input pipeline before the call to .cache() will 
+        have no effect until the cache file is removed or the filename is 
+        changed.
+
+        .. note::
+            For the cache to be finalized, the input dataset must be 
+            iterated through in its entirety. Otherwise, subsequent 
+            iterations will not use cached data.
+
+            We would also like to mention and thank the tensorflow team,
+            as this has been a great inspiration.[1]_
+
+        Parameters
+        ----------
+        filepath: path-like
+            A `str` representing the name of a file on the filesystem 
+            to use for caching elements in this Dataset. If a filename is not 
+            provided, the dataset will be cached in memory.
+
+        Returns
+        -------
+        `ElementGenerator`
+
+        Examples
+        --------
+        >>> L = TraceGenerator.from_file('/path/to/file.xes')
+        >>> L = L.filter(lambda trace: len(trace) <= 5)
+        >>> L = L.cache() 
+        >>> # The first time reading through the data will generate the data using 
+        >>> # `from_file` and `filter`.
+        >>> len(list(L))
+        ... 6 
+        >>> # Subsequent iterations read from the cache.
+        >>> len(list(L))
+        ... 6
+
+        Similarly, you can also cache to a file.
+        >>> L = TraceGenerator.from_file('/path/to/file.xes')
+        >>> L = L.filter(lambda trace: len(trace) <= 5)
+        >>> L = L.cache(/path/to/cache_file.dat)
+
+        References
+        ----------
+        .. [1] TensorFlow. (2020). tf.data.Dataset  |  TensorFlow Core v2.1.0. 
+            [online] Available at: 
+            https://www.tensorflow.org/api_docs/python/tf/data/Dataset#cache 
+            [Accessed 11 Apr. 2020].
+        """
+        return _CacheGenerator(self, filepath=filepath)
+
+    def filter(self, predicate):
+        return self
+
+    @property
+    def attributes(self):
+        """Return generator attributes.
+        """
+        return self.__attributes
 
 class XESImporter(Importer):
     """Importer of XES files. 
@@ -19,9 +115,9 @@ class XESImporter(Importer):
     Attempts to implements as close as possible the XES standard
     definition [1]_. 
 
-    **Warning**: We currently assume that all meta information lies before the 
-    first occurence of a trace and none after.
-
+    .. warning:: 
+        This class should not be used directly. Use derived classes instead.
+    
     Parameters
     ----------
     fielpath: str
@@ -63,13 +159,13 @@ class XESImporter(Importer):
         self.__context = None
 
     def __iter__(self):
-        self._initialize_resources(tag="{*}trace")
+        self.__initialize_resources(tag="{*}trace")
         return self
 
     def __next__(self):
         try:
             _, elem = next(self.__context)
-            trace = self._parse_trace(elem)
+            trace = self.__parse_trace(elem)
             elem.clear()
 
             while elem.getprevious() is not None:
@@ -78,10 +174,10 @@ class XESImporter(Importer):
             return trace
 
         except StopIteration:
-            self._clean_resources()
+            self.__clean_resources()
             raise StopIteration
 
-    def _initialize_resources(self, events=('end',), tag=None):
+    def __initialize_resources(self, events=('end',), tag=None):
         """Setup up source resources, primarily the `lxml` iterator.
 
         Parameters
@@ -110,7 +206,7 @@ class XESImporter(Importer):
         self.__context = etree.iterparse(
             self.__source, events=events, tag=tag)
 
-    def _clean_resources(self):
+    def __clean_resources(self):
         """Close resources opened in a previous step, such as releasing opened
         files and archives.
         """
@@ -128,7 +224,7 @@ class XESImporter(Importer):
         """Extract XES log meta informations such as classifiers, extensions, 
         attributes and global definitions.
         """
-        self._initialize_resources()
+        self.__initialize_resources()
 
         attributes, classifiers, extensions = dict(), dict(), dict()
         omni = {"trace": dict(), "event": dict()}
@@ -141,14 +237,14 @@ class XESImporter(Importer):
             if "global" in elem.tag:
                 for child in elem.iterchildren():
                     omni[elem.attrib["scope"]][child.attrib["key"]
-                                               ] = self._parse_attribute(child)
+                                               ] = self.__parse_attribute(child)
             # TODO: Add asumption in documentation.
             # ASSUMPTION: All trace tags lie at the end of the XES file, and
             # after and in-between them there are no other tag types.
             if "trace" in elem.tag:
                 break
 
-        self._clean_resources()
+        self.__clean_resources()
 
         return {
             'attributes': attributes,
@@ -157,7 +253,7 @@ class XESImporter(Importer):
             'omni': omni
         }
 
-    def _parse_trace(self, trace):
+    def __parse_trace(self, trace):
         """Parse trace as described in the XES standard
         definition [1]_.
 
@@ -179,14 +275,14 @@ class XESImporter(Importer):
                 e = Event()
                 for attribute in child.iterchildren():
                     e[attribute.attrib["key"]
-                      ] = self._parse_attribute(attribute)
+                      ] = self.__parse_attribute(attribute)
                 events.append(e)
             else:
-                attrib[child.attrib["key"]] = self._parse_attribute(child)
+                attrib[child.attrib["key"]] = self.__parse_attribute(child)
 
         return Trace(*events, attributes=attrib)
 
-    def _parse_attribute(self, attribute):
+    def __parse_attribute(self, attribute):
         """Parse an attribute as described in the XES standard
         definition [1]_.
 
@@ -215,13 +311,41 @@ class XESImporter(Importer):
 
         return value
 
+class _PickleImporter(Importer):
+    """Importer for pickled elements.
+
+    Elements are expected to have been inserted one-by-one,
+    as the `_PickleImporter` still iterates over the file, 
+    instead of reading all into memory.
+
+    Parameters
+    ----------
+    filepath: path-like
+        A `str` representing the name of an existing file on the 
+        filesystem.
+    """
+    def __init__(self, filepath):
+        self.__filepath = filepath
+
+    def __iter__(self):
+        self.__source = open(self.__filepath, 'rb')
+        return self
+
+    def __next__(self):
+        try:
+            trace = pickle.load(self.__source)
+            return trace
+        except EOFError:
+            self.__source.close()
+            raise StopIteration
+
 
 class TraceGenerator(ElementGenerator):
     """Generating trace class, representation for an event log.
-    
+
     Parameters
     ----------
-    *args: iterable
+    source: iterable or list-like
         Underlying generator.
 
     attributes: dict, default `None`
@@ -247,7 +371,8 @@ class TraceGenerator(ElementGenerator):
     >>> L = L.filter(lambda trace: len(trace) < 5)
     >>> L = L.shuffle() 
     """
-    def __init__(self, *args, attributes=None):
+
+    def __init__(self, source, attributes=None):
         if attributes is None:
             attributes, classifiers, extensions = dict(), dict(), dict()
             omni = {"trace": dict(), "event": dict()}
@@ -257,20 +382,21 @@ class TraceGenerator(ElementGenerator):
                 'extensions': extensions,
                 'omni': omni
             }
-        super(TraceGenerator, self).__init__(*args, attributes=attributes)
+        super(TraceGenerator, self).__init__(source, attributes=attributes)
 
     def __iter__(self):
-        if self._gen is None:
+        if self._source is None:
             raise ValueError(
                 "No underlying generator has yet been initialized.")
-        return iter(*self._gen)
+        return iter(self._source)
 
     @staticmethod
     def from_file(filepath, compression=None):
         """Parse an xes-file iteratively. 
 
-        **Warning**: We currently assume that all meta information lies before the 
-        first occurence of a trace in the xes-file and none after.
+        .. warning::
+            We currently assume that all meta information lies before the 
+            first occurence of a trace in the xes-file and none after.
 
         Parameters
         ----------
@@ -290,3 +416,60 @@ class TraceGenerator(ElementGenerator):
         attributes = gen._extract_meta()
 
         return TraceGenerator(gen, attributes=attributes)
+
+
+class _CacheGenerator(ElementGenerator):
+    """A `ElementGenerator` that caches the elements of it's source.
+    """
+
+    def __init__(self, source, filepath=None):
+        self.__cached = False
+        self.__cache = []
+
+        # Reference to original generator
+        self.__original = source
+        
+        if filepath is not None:
+            if not validate_filepath(filepath):
+                raise ValueError("Make sure filepath exists. Path: {}.".format(filepath))
+            if os.path.getsize(filepath) == 0:
+                self.__pickle_generator_to_file(source, filepath)
+            self.__cache = _PickleImporter(filepath)
+            source = self.__cache
+            self.__cached = True
+
+        super(_CacheGenerator, self).__init__(source)
+        
+    def __iter__(self):
+        if self.__cached:
+            self._source = self.__cache
+        self._source = iter(self._source)
+        return self
+
+    def __next__(self):
+        try:
+            trace = next(self._source)
+            if not self.__cached:
+                self.__cache.append(trace)
+            return trace
+        except StopIteration:
+            if not self.__cached:
+                self.__cached = True
+                self._source = self.__cache
+            raise StopIteration
+
+    def __pickle_generator_to_file(self, source, filepath):
+        with open(filepath, 'wb') as handler:
+            for trace in source:
+                pickle.dump(trace, handler)
+
+    @property
+    def attributes(self):
+        """Returns underlying generator attributes.
+        """
+        if self._source is None:
+            raise ValueError(
+                "No underlying generator has yet been initialized.")
+        if self.__cached:
+            return self.__original.attributes
+        return self._source.attributes
