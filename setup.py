@@ -51,7 +51,7 @@ setuptools.setup(
     install_requires=requires,
 
     classifiers=classifiers,
-    python_requires=">=3.7",
+    python_requires=">=3.6",
     project_urls={
         'Source': 'https://github.com/xcavation/feldspar',
     },
