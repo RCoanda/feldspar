@@ -81,10 +81,10 @@ class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
         >>> # The first time reading through the data will generate the data using 
         >>> # `from_file` and `filter`.
         >>> len(list(L))
-        ... 6 
+        6 
         >>> # Subsequent iterations read from the cache.
         >>> len(list(L))
-        ... 6
+        6
 
         Similarly, you can also cache to a file.
         >>> L = TraceGenerator.from_file('/path/to/file.xes')
@@ -101,7 +101,38 @@ class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
         return _CacheGenerator(self, filepath=filepath)
 
     def filter(self, predicate):
-        return self
+        """Filters this dataset according to `predicate`.
+
+        .. note::
+            We would also like to mention and thank the tensorflow team,
+            as this has been a great inspiration.[1]_
+
+        Parameters
+        ----------
+        predicate: function
+            A function mapping a dataset element to a boolean.
+
+        Returns
+        -------
+        `ElementGenerator`
+
+        Examples
+        --------
+        >>> L = TraceGenerator.from_file('/path/to/file.xes')
+        >>> len(L)
+        6
+        >>> L = L.filter(lambda trace: len(trace) <= 5)
+        >>> len(list(L))
+        4
+
+        References
+        ----------
+        .. [1] TensorFlow. (2020). tf.data.Dataset  |  TensorFlow Core v2.1.0. 
+            [online] Available at: 
+            https://www.tensorflow.org/api_docs/python/tf/data/Dataset#cache 
+            [Accessed 11 Apr. 2020].
+        """
+        return _FilterGenerator(self, predicate=predicate)
 
     @property
     def attributes(self):
@@ -473,3 +504,13 @@ class _CacheGenerator(ElementGenerator):
         if self.__cached:
             return self.__original.attributes
         return self._source.attributes
+
+class _FilterGenerator(ElementGenerator):
+    """A `ElementGenerator` that filters the elements of it's source.
+    """
+    def __init__(self, source, predicate):
+        super(_FilterGenerator, self).__init__(source)
+        self.__predicate = predicate
+
+    def __iter__(self):
+        return filter(self.__predicate, self._source)

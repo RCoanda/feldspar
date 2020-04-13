@@ -38,6 +38,7 @@ Feldspar is here to help you with you process mining needs.
          +  iterate XES files                         + next entry
          +  cache your datasets to memory 
             or to file
+         +  filter dataset
 </pre>
 
 

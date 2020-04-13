@@ -184,17 +184,25 @@ class TestElementGeneratorCaching:
 
         assert all(x == y for x, y in zip(L1, target))
 
+    def test_filter_then_cache(self):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.filter(lambda trace: len(trace) <= 5)
+        L = L.cache()
+
+        assert all(x == y for x, y in zip(L, target))
+
 
 class TestElementGeneratorFiltering:
     def test_filter(self):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
-        L = L.filter(lambda t: int(t["concept:name"]) > 2)
-        assert len(list(L)) == 4
+        L = L.filter(lambda trace: len(trace) <= 5)
+        assert all(x == y for x, y in zip(L, target))
 
     def test_filter_multiple_pass_throughs(self):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
-
-        L = L.filter(lambda t: int(t["concept:name"]) > 2)
-
-        assert len(list(L)) == 4
-        assert len(list(L)) == 4
+        L = L.filter(lambda trace: len(trace) <= 5)
+        assert all(x == y for x, y in zip(L, target))
+        assert all(x == y for x, y in zip(L, target))
