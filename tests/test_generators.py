@@ -206,3 +206,11 @@ class TestElementGeneratorFiltering:
         L = L.filter(lambda trace: len(trace) <= 5)
         assert all(x == y for x, y in zip(L, target))
         assert all(x == y for x, y in zip(L, target))
+
+    def test_filter_chaining(self):
+        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+        L = L.filter(lambda trace: len(trace) <= 5)
+        L = L.filter(lambda trace: trace[-1]["concept:name"] == "pay compensation" )
+        assert len(list(L)) == 2  
+
