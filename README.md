@@ -30,8 +30,6 @@ Foundational process mining library.
 <p>&nbsp;</p>
 
 ## Supported Features
-<hr>
-
 Feldspar is here to help you with you process mining needs.
 
 <pre class="test">
@@ -39,16 +37,14 @@ Feldspar is here to help you with you process mining needs.
          +  cache your datasets to memory 
             or to file
          +  filter dataset
+         +  map dataset elements
 </pre>
 
 
 ## Install
-<hr>
-
 The recommended way to intall the `feldspar` module is to simply use `pip`:
 ```console
 $ pip install feldspar
 ```
 
 ## Resources
-<hr>
