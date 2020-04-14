@@ -5,6 +5,7 @@ import warnings
 import zipfile
 from abc import ABCMeta
 from collections.abc import Iterator
+import multiprocessing
 
 from dateutil.parser import parse
 from lxml import etree
@@ -110,7 +111,7 @@ class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
         Parameters
         ----------
         predicate: function
-            A function mapping a dataset element to a boolean.
+            A function mapping a `ElementGenerator` element to a boolean.
 
         Returns
         -------
@@ -134,11 +135,76 @@ class ElementGenerator(BaseGenerator, metaclass=ABCMeta):
         """
         return _FilterGenerator(self, predicate=predicate)
 
+    def map(self, map_func):
+        """Maps `map_func` across the elements of this dataset.
+
+        This transformation applies `map_func` to each element of this dataset, 
+        and returns a new dataset containing the transformed elements, in the 
+        same order as they appeared in the input. `map_func` can be used to 
+        change both the values and the structure of a dataset's elements. For 
+        example, adding 1 to each element, or projecting a subset of element 
+        components.
+
+         .. note::
+            We would also like to mention and thank the tensorflow team,
+            as this has been a great inspiration.[1]_
+
+        Parameters
+        ----------
+        map_func: function
+            A function mapping a 'ElementGenerator' element to another 
+            `ElementGenerator` element.
+
+        Returns
+        -------
+        `ElementGenerator`
+
+        Examples
+        --------
+        >>> L = TraceGenerator.from_file('/path/to/file.xes')
+        >>> first = next(iter(L))
+        >>> first[0]
+        {
+            "concept:name": "register request"
+            "org:resource": "Pete"
+        }
+        >>> def label_initial(trace):
+        ...     for event in trace:
+        ...         event["concept:name"] = event["concept:name"][0]
+        ...     return trace
+        >>> L = L.map(label_initial)
+        >>> first = next(iter(L))
+        >>> first[0]
+        {
+            "concept:name": "r"
+            "org:resource": "Pete"
+        }
+
+        We can also change the structure of the elements.
+        >>> L = TraceGenerator.from_file('/path/to/file.xes')
+        >>> next(iter(L))
+        Trace(number_of_events=26)
+        >>> def label_sequence(trace):
+        ...     return tuple(e["concept:name"] for e in trace)
+        >>> L = L.map(label_sequence)
+        >>> next(iter(L))
+        ('A_SUBMITTED', 'A_PARTLYSUBMITTED', 'A_PREACCEPTED', ...)
+
+        References
+        ----------
+        .. [1] TensorFlow. (2020). tf.data.Dataset  |  TensorFlow Core v2.1.0. 
+            [online] Available at: 
+            https://www.tensorflow.org/api_docs/python/tf/data/Dataset#cache 
+            [Accessed 11 Apr. 2020].
+        """
+        return _MapGenerator(self, map_func)
+
     @property
     def attributes(self):
         """Return generator attributes.
         """
         return self.__attributes
+
 
 class XESImporter(Importer):
     """Importer of XES files. 
@@ -148,7 +214,7 @@ class XESImporter(Importer):
 
     .. warning:: 
         This class should not be used directly. Use derived classes instead.
-    
+
     Parameters
     ----------
     fielpath: str
@@ -342,6 +408,7 @@ class XESImporter(Importer):
 
         return value
 
+
 class _PickleImporter(Importer):
     """Importer for pickled elements.
 
@@ -355,6 +422,7 @@ class _PickleImporter(Importer):
         A `str` representing the name of an existing file on the 
         filesystem.
     """
+
     def __init__(self, filepath):
         self.__filepath = filepath
 
@@ -459,10 +527,11 @@ class _CacheGenerator(ElementGenerator):
 
         # Reference to original generator
         self.__original = source
-        
+
         if filepath is not None:
             if not validate_filepath(filepath):
-                raise ValueError("Make sure filepath exists. Path: {}.".format(filepath))
+                raise ValueError(
+                    "Make sure filepath exists. Path: {}.".format(filepath))
             if os.path.getsize(filepath) == 0:
                 self.__pickle_generator_to_file(source, filepath)
             self.__cache = _PickleImporter(filepath)
@@ -470,7 +539,7 @@ class _CacheGenerator(ElementGenerator):
             self.__cached = True
 
         super(_CacheGenerator, self).__init__(source)
-        
+
     def __iter__(self):
         if self.__cached:
             self._source = self.__cache
@@ -505,12 +574,53 @@ class _CacheGenerator(ElementGenerator):
             return self.__original.attributes
         return self._source.attributes
 
+
 class _FilterGenerator(ElementGenerator):
     """A `ElementGenerator` that filters the elements of it's source.
     """
+
     def __init__(self, source, predicate):
         super(_FilterGenerator, self).__init__(source)
         self.__predicate = predicate
 
     def __iter__(self):
         return filter(self.__predicate, self._source)
+
+
+class _MapGenerator(ElementGenerator):
+    """An `ElementGenerator` that maps a function over elements in its input.
+    """
+    def __init__(self, source, map_func):
+        super(_MapGenerator, self).__init__(source)
+        self.__map_func = map_func
+
+    def __iter__(self):
+        return map(self.__map_func, self._source)
+
+
+class _ParallelMapGenerator(ElementGenerator):
+    """A `ElementGenerator` that maps a function over elements in its input in 
+    parallel.
+    """
+
+    def __init__(self, source, map_func, num_parallel_calls=2):
+        super(_ParallelMapGenerator, self).__init__(source)
+        if num_parallel_calls < 1 or num_parallel_calls > 8:
+            raise ValueError("Invalid number of parallel calls.")
+        self.__num_parallel_calls = num_parallel_calls
+        self.__map_func = map_func
+
+    def __iter__(self):
+        self.__pool = multiprocessing.Pool(processes=self.__num_parallel_calls)
+        self.__it = iter(self.__pool.map(self.__map_func, self._source, 100))
+        return self
+
+    def __next__(self):
+        try:
+            trace = next(self.__it)
+            return trace
+        except:
+            self.__pool.close()
+            self.__it = None
+            raise StopIteration
+        

@@ -15,3 +15,5 @@ RUNNING_EXAMPLE_XES_ZIP_PATH = os.path.join(
 RUNNING_EXAMPLE_CSV_PATH = os.path.join(DATASETS_PATH, "running-example.csv")
 RUNNING_EXAMPLE_XLS_PATH = os.path.join(DATASETS_PATH, "running-example.xls")
 RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH = os.path.join(DATASETS_PATH, "running-example-traces-len-lteq-5.xes")
+RUNNING_EXAMPLE_LABELS_INITIALS = os.path.join(DATASETS_PATH, "running-example-labels-initials.xes")
+

@@ -6,7 +6,8 @@ from dateutil.parser import parse
 from feldspar.generators import XESImporter, TraceGenerator, _PickleImporter
 
 from . import (RUNNING_EXAMPLE_XES_PATH, RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH,
-               RUNNING_EXAMPLE_XES_GZ_PATH, RUNNING_EXAMPLE_XES_ZIP_PATH)
+               RUNNING_EXAMPLE_XES_GZ_PATH, RUNNING_EXAMPLE_XES_ZIP_PATH,
+               RUNNING_EXAMPLE_LABELS_INITIALS)
 from .fixtures import tmp_dat_file
 
 
@@ -185,7 +186,8 @@ class TestElementGeneratorCaching:
         assert all(x == y for x, y in zip(L1, target))
 
     def test_filter_then_cache(self):
-        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
+        target = TraceGenerator.from_file(
+            RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
         L = L.filter(lambda trace: len(trace) <= 5)
         L = L.cache()
@@ -195,22 +197,64 @@ class TestElementGeneratorCaching:
 
 class TestElementGeneratorFiltering:
     def test_filter(self):
-        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
+        target = TraceGenerator.from_file(
+            RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
         L = L.filter(lambda trace: len(trace) <= 5)
         assert all(x == y for x, y in zip(L, target))
 
     def test_filter_multiple_pass_throughs(self):
-        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
+        target = TraceGenerator.from_file(
+            RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
         L = L.filter(lambda trace: len(trace) <= 5)
         assert all(x == y for x, y in zip(L, target))
         assert all(x == y for x, y in zip(L, target))
 
     def test_filter_chaining(self):
-        target = TraceGenerator.from_file(RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
+        target = TraceGenerator.from_file(
+            RUNNING_EXAMPLE_TRACES_LEN_LTEQ_5_PATH)
         L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
         L = L.filter(lambda trace: len(trace) <= 5)
-        L = L.filter(lambda trace: trace[-1]["concept:name"] == "pay compensation" )
-        assert len(list(L)) == 2  
+        L = L.filter(lambda trace: trace[-1]
+                     ["concept:name"] == "pay compensation")
+        assert len(list(L)) == 2
 
+
+class TestElementGeneratorMapping:
+
+    @staticmethod
+    def label_initial(trace):
+        for event in trace:
+            event["concept:name"] = event["concept:name"][0]
+            event["Activity"] = event["concept:name"][0]
+        return trace
+
+    def test_map(self):
+        target = TraceGenerator.from_file(
+            RUNNING_EXAMPLE_LABELS_INITIALS)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+
+        L = L.map(self.label_initial)
+
+        assert all(x == y for x, y in zip(L, target))
+    
+    def test_map_multiple_pass_through(self):
+        target = TraceGenerator.from_file(
+            RUNNING_EXAMPLE_LABELS_INITIALS)
+        L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+
+        L = L.map(self.label_initial)
+
+        assert all(x == y for x, y in zip(L, target))
+        assert all(x == y for x, y in zip(L, target))
+
+    # def test_map_parallel(self):
+    #     target = TraceGenerator.from_file(
+    #         RUNNING_EXAMPLE_LABELS_INITIALS)
+    #     L = TraceGenerator.from_file(RUNNING_EXAMPLE_XES_PATH)
+
+    #     L = L.map(self.label_initial, num_parallel_calls=2)
+
+    #     print("a")
+    #     assert all(x == y for x, y in zip(L, target))
