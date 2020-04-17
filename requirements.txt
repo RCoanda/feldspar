@@ -5,3 +5,4 @@ python-dateutil==2.8.1
 # Development dependencies
 autopep8==1.5.1
 pytest==5.4.1
+line_profiler==3.0.2
