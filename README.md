@@ -3,7 +3,7 @@
     <a href="https://github.com/xcavation/feldspar">
       <img src="https://raw.githubusercontent.com/xcavation/feldspar/develop/assets/readme_cover_2.jpg" align="center">
     </a>
-    Photo by Stephen Leonardi on Unsplash
+    Photo by Mirko Blicke on Unsplash
   </pre>
 </span>
 
