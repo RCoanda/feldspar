@@ -235,7 +235,7 @@ class XESImporter(Importer):
         at: http://xes-standard.org/ [Accessed 8 Apr. 2020].
     """
 
-    def __init__(self, filepath, compression=None):
+    def __init__(self, filepath, compression=None, infer_types=False):
         super(XESImporter, self).__init__()
 
         guess = infer_compression(filepath)
@@ -250,6 +250,7 @@ class XESImporter(Importer):
                 warnings.warn(Warning("The file might not be a '.xes' file."))
 
         self.__compression = compression
+        self.__infer_types = infer_types
         self.__filepath = filepath
         self.__source = None
         self.__archive = None
@@ -395,16 +396,17 @@ class XESImporter(Importer):
         """
         value = attribute.attrib["value"]
 
-        try:
-            if "int" in attribute.tag:
-                value = int(value)
-            if "float" in attribute.tag:
-                value = float(value)
-            if "date" in attribute.tag:
-                value = parse(value)
-            # TODO: Extend for id, lists, containers
-        except:
-            pass
+        if self.__infer_types:
+            try:
+                if "int" in attribute.tag:
+                    value = int(value)
+                if "float" in attribute.tag:
+                    value = float(value)
+                if "date" in attribute.tag:
+                    value = parse(value)
+                # TODO: Extend for id, lists, containers
+            except:
+                pass
 
         return value
 
@@ -490,7 +492,7 @@ class TraceGenerator(ElementGenerator):
         return iter(self._source)
 
     @staticmethod
-    def from_file(filepath, compression=None):
+    def from_file(filepath, compression=None, infer_type=False):
         """Parse an xes-file iteratively. 
 
         .. warning::
@@ -511,7 +513,7 @@ class TraceGenerator(ElementGenerator):
             * "zip" - zip file compression. We assume that there is only one file
                 inside the zip, namely the .xes file.
         """
-        gen = XESImporter(filepath, compression)
+        gen = XESImporter(filepath, compression, infer_type)
         attributes = gen._extract_meta()
 
         return TraceGenerator(gen, attributes=attributes)
