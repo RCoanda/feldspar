@@ -596,31 +596,3 @@ class _MapGenerator(ElementGenerator):
 
     def __iter__(self):
         return map(self.__map_func, self._source)
-
-
-class _ParallelMapGenerator(ElementGenerator):
-    """A `ElementGenerator` that maps a function over elements in its input in 
-    parallel.
-    """
-
-    def __init__(self, source, map_func, num_parallel_calls=2):
-        super(_ParallelMapGenerator, self).__init__(source)
-        if num_parallel_calls < 1 or num_parallel_calls > 8:
-            raise ValueError("Invalid number of parallel calls.")
-        self.__num_parallel_calls = num_parallel_calls
-        self.__map_func = map_func
-
-    def __iter__(self):
-        self.__pool = multiprocessing.Pool(processes=self.__num_parallel_calls)
-        self.__it = iter(self.__pool.map(self.__map_func, self._source, 100))
-        return self
-
-    def __next__(self):
-        try:
-            trace = next(self.__it)
-            return trace
-        except:
-            self.__pool.close()
-            self.__it = None
-            raise StopIteration
-        
