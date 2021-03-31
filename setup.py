@@ -18,7 +18,7 @@ packages = ['feldspar']
 
 requires = [
     "filetype==1.0.6",
-    "lxml==4.5.0",
+    "lxml==4.6.3",
     "python-dateutil==2.8.1"
 ]
 
